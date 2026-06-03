@@ -5,49 +5,107 @@ from .client import local_train
 
 
 def _finite_nonnegative(value):
-    value = float(value)
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return 0.0
     if not np.isfinite(value) or value < 0:
         return 0.0
     return value
+
+
+def _int_nonnegative(value):
+    try:
+        value = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    return max(value, 0)
 
 
 def _format_float_list(values):
     return "[" + ", ".join(f"{value:.6g}" for value in values) + "]"
 
 
+def _num_experts_from_client_stats(client_fisher_totals, client_expert_usages):
+    client_fisher_totals = client_fisher_totals or []
+    client_expert_usages = client_expert_usages or []
+    fisher_lengths = [
+        len(totals) for totals in client_fisher_totals if totals is not None
+    ]
+    usage_lengths = [
+        len(usage) for usage in client_expert_usages if usage is not None
+    ]
+    return max(fisher_lengths + usage_lengths, default=0)
+
+
 def _print_fisher_total_summary(client_fisher_totals, client_expert_usages):
     if not client_fisher_totals:
         return
 
-    num_experts = len(client_fisher_totals[0])
+    num_experts = _num_experts_from_client_stats(
+        client_fisher_totals, client_expert_usages
+    )
+    if num_experts <= 0:
+        return
+
+    client_expert_usages = client_expert_usages or []
+
     usage_sum = []
     fisher_sum = []
     fisher_median_pos = []
+    fisher_max = []
     zero_fisher_clients = []
 
     for expert_id in range(num_experts):
-        usages = [
-            int(usage[expert_id])
-            for usage in client_expert_usages
-            if usage is not None and expert_id < len(usage)
-        ]
-        fishers = [
-            _finite_nonnegative(totals[expert_id])
-            for totals in client_fisher_totals
-            if totals is not None and expert_id < len(totals)
-        ]
+        usages = []
+        for usage in client_expert_usages:
+            if usage is not None and expert_id < len(usage):
+                usages.append(_int_nonnegative(usage[expert_id]))
+
+        fishers = []
+        for totals in client_fisher_totals:
+            if totals is not None and expert_id < len(totals):
+                fishers.append(_finite_nonnegative(totals[expert_id]))
+            else:
+                fishers.append(0.0)
+
         positives = [value for value in fishers if value > 0]
 
         usage_sum.append(sum(usages))
         fisher_sum.append(sum(fishers))
         fisher_median_pos.append(float(np.median(positives)) if positives else 0.0)
+        fisher_max.append(max(fishers) if fishers else 0.0)
         zero_fisher_clients.append(sum(value <= 0 for value in fishers))
 
     print(
         f"[FisherTotalHook] usage_sum={usage_sum} "
         f"fisher_sum={_format_float_list(fisher_sum)} "
         f"fisher_median_pos={_format_float_list(fisher_median_pos)} "
+        f"fisher_max={_format_float_list(fisher_max)} "
         f"zero_fisher_clients={zero_fisher_clients}"
+    )
+
+
+def _stats_float_list(stats, key):
+    if not isinstance(stats, dict):
+        return []
+    values = stats.get(key) or []
+    return [_finite_nonnegative(value) for value in values]
+
+
+def _stats_int_list(stats, key):
+    if not isinstance(stats, dict):
+        return []
+    values = stats.get(key) or []
+    return [_int_nonnegative(value) for value in values]
+
+
+def _print_fisher_total_agg_summary(stats):
+    print(
+        f"[FisherTotalAgg] weight_max={_format_float_list(_stats_float_list(stats, 'weight_max'))} "
+        f"weight_min_pos={_format_float_list(_stats_float_list(stats, 'weight_min_pos'))} "
+        f"weight_entropy={_format_float_list(_stats_float_list(stats, 'weight_entropy'))} "
+        f"fallback_experts={_stats_int_list(stats, 'fallback_experts')}"
     )
 
 
@@ -90,14 +148,21 @@ def run_fl_round(
     if compute_fisher_total:
         _print_fisher_total_summary(client_fisher_totals, client_expert_usages)
 
-    new_state = aggregate_split_model(
+    aggregate_result = aggregate_split_model(
         global_model=global_model,
         client_states=client_states,
         client_samples=client_samples,
         non_expert_agg_method=non_expert_agg_method,
         expert_agg_method=expert_agg_method,
         client_fisher_totals=client_fisher_totals if compute_fisher_total else None,
+        return_stats=compute_fisher_total,
     )
+    if compute_fisher_total:
+        new_state, fisher_total_agg_stats = aggregate_result
+        _print_fisher_total_agg_summary(fisher_total_agg_stats)
+    else:
+        new_state = aggregate_result
+
     avg_loss = float(np.mean(client_losses))
 
     return new_state, avg_loss
