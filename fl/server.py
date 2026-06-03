@@ -109,6 +109,40 @@ def _print_fisher_total_agg_summary(stats):
     )
 
 
+def _print_history_wolf_summary(stats, include_p_mean=False):
+    print(f"[HistoryWoLF] q_mean={_format_float_list(_stats_float_list(stats, 'q_mean'))}")
+    if include_p_mean:
+        print(f"[HistoryWoLF] p_mean={_format_float_list(_stats_float_list(stats, 'p_mean'))}")
+    print(
+        f"[HistoryWoLF] h_prev_mean="
+        f"{_format_float_list(_stats_float_list(stats, 'h_prev_mean'))}"
+    )
+    print(
+        f"[HistoryWoLF] h_new_mean="
+        f"{_format_float_list(_stats_float_list(stats, 'h_new_mean'))}"
+    )
+    print(
+        f"[HistoryWoLF] rho_mean="
+        f"{_format_float_list(_stats_float_list(stats, 'rho_mean'))}"
+    )
+    print(
+        f"[HistoryWoLF] weight_entropy="
+        f"{_format_float_list(_stats_float_list(stats, 'weight_entropy'))}"
+    )
+    print(f"[HistoryWoLF] fallback_experts={_stats_int_list(stats, 'fallback_experts')}")
+    print(f"[HistoryWoLF] quadrant_counts={stats.get('quadrant_counts', {})}")
+    print(
+        f"[HistoryWoLF] quadrant_weight_mean="
+        f"{stats.get('quadrant_weight_mean', {})}"
+    )
+    print(
+        f"[HistoryWoLF] quadrant_raw_weight_mean="
+        f"{stats.get('quadrant_raw_weight_mean', {})}"
+    )
+    if include_p_mean and "quadrant_fisher_mean" in stats:
+        print(f"[HistoryWoLF] quadrant_fisher_mean={stats['quadrant_fisher_mean']}")
+
+
 def run_fl_round(
     global_model,
     client_loaders,
@@ -120,8 +154,11 @@ def run_fl_round(
     weight_decay,
     non_expert_agg_method,
     expert_agg_method,
+    history_wolf_state=None,
+    num_clients=None,
+    num_experts=None,
 ):
-    compute_fisher_total = expert_agg_method == "fisher_total"
+    compute_fisher_total = expert_agg_method in {"fisher_total", "fisher_history_wolf"}
     client_states = []
     client_samples = []
     client_losses = []
@@ -155,14 +192,24 @@ def run_fl_round(
         non_expert_agg_method=non_expert_agg_method,
         expert_agg_method=expert_agg_method,
         client_fisher_totals=client_fisher_totals if compute_fisher_total else None,
-        return_stats=compute_fisher_total,
+        return_stats=(
+            compute_fisher_total
+            or expert_agg_method in {"history_wolf", "fisher_history_wolf"}
+        ),
+        selected_client_ids=chosen_clients,
+        history_wolf_state=history_wolf_state,
+        num_clients=num_clients,
+        num_experts=num_experts,
     )
-    if compute_fisher_total:
-        new_state, fisher_total_agg_stats = aggregate_result
-        _print_fisher_total_agg_summary(fisher_total_agg_stats)
-    else:
-        new_state = aggregate_result
+    new_state, agg_stats, history_wolf_state = aggregate_result
+    if expert_agg_method == "fisher_total":
+        _print_fisher_total_agg_summary(agg_stats)
+    if expert_agg_method in {"history_wolf", "fisher_history_wolf"} and agg_stats:
+        _print_history_wolf_summary(
+            agg_stats,
+            include_p_mean=expert_agg_method == "fisher_history_wolf",
+        )
 
     avg_loss = float(np.mean(client_losses))
 
-    return new_state, avg_loss
+    return new_state, avg_loss, history_wolf_state

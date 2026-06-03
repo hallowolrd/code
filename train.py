@@ -86,6 +86,7 @@ def main():
     records = []
     best_acc = 0.0
     m = max(1, int(cfg["num_clients"] * cfg["frac"]))
+    history_wolf_state = None
 
     print(f"{'Round':>5} | {'LR':>8} | {'AvgLoss':>9} | {'TestAcc':>8} | {'BestAcc':>8}")
     print("-" * 52)
@@ -94,7 +95,7 @@ def main():
         current_lr = cfg["lr"]
         chosen = np.random.choice(cfg["num_clients"], m, replace=False).tolist()
 
-        new_state, avg_loss = run_fl_round(
+        new_state, avg_loss, history_wolf_state = run_fl_round(
             global_model=global_model,
             client_loaders=client_loaders,
             chosen_clients=chosen,
@@ -105,6 +106,9 @@ def main():
             weight_decay=cfg["weight_decay"],
             non_expert_agg_method=cfg["non_expert_agg_method"],
             expert_agg_method=cfg["expert_agg_method"],
+            history_wolf_state=history_wolf_state,
+            num_clients=cfg["num_clients"],
+            num_experts=cfg["num_experts"],
         )
         global_model.load_state_dict(new_state)
 

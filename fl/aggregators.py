@@ -3,6 +3,7 @@ import statistics
 
 import torch
 
+from .history_wolf import aggregate_keys_history_wolf
 from .param_groups import get_expert_id_from_key, split_state_keys
 
 
@@ -206,6 +207,10 @@ def aggregate_split_model(
     expert_agg_method="uniform",
     client_fisher_totals=None,
     return_stats=False,
+    selected_client_ids=None,
+    history_wolf_state=None,
+    num_clients=None,
+    num_experts=None,
 ):
     global_state = global_model.state_dict()
     expert_keys, non_expert_keys = split_state_keys(global_state)
@@ -234,6 +239,50 @@ def aggregate_split_model(
         else:
             expert_state = fisher_result
         new_state.update(expert_state)
+    elif expert_agg_method == "history_wolf":
+        if selected_client_ids is None:
+            raise ValueError("selected_client_ids must be provided for history_wolf")
+        if num_clients is None or num_experts is None:
+            raise ValueError(
+                "num_clients and num_experts must be provided for history_wolf"
+            )
+        expert_state, history_wolf_state, agg_stats = aggregate_keys_history_wolf(
+            global_state=global_state,
+            client_states=client_states,
+            selected_client_ids=selected_client_ids,
+            keys=expert_keys,
+            history_wolf_state=history_wolf_state,
+            num_clients=num_clients,
+            num_experts=num_experts,
+            return_stats=return_stats,
+        )
+        new_state.update(expert_state)
+    elif expert_agg_method == "fisher_history_wolf":
+        if selected_client_ids is None:
+            raise ValueError(
+                "selected_client_ids must be provided for fisher_history_wolf"
+            )
+        if num_clients is None or num_experts is None:
+            raise ValueError(
+                "num_clients and num_experts must be provided for fisher_history_wolf"
+            )
+        if client_fisher_totals is None:
+            raise ValueError(
+                "client_fisher_totals must be provided for fisher_history_wolf"
+            )
+        expert_state, history_wolf_state, agg_stats = aggregate_keys_history_wolf(
+            global_state=global_state,
+            client_states=client_states,
+            selected_client_ids=selected_client_ids,
+            keys=expert_keys,
+            history_wolf_state=history_wolf_state,
+            num_clients=num_clients,
+            num_experts=num_experts,
+            client_fisher_totals=client_fisher_totals,
+            use_fisher_precision=True,
+            return_stats=return_stats,
+        )
+        new_state.update(expert_state)
     else:
         expert_agg = build_key_aggregator(expert_agg_method)
         if expert_agg_method == "sample_weighted":
@@ -247,6 +296,4 @@ def aggregate_split_model(
         raise ValueError("Aggregated state keys do not match global_state keys")
 
     ordered_state = {key: new_state[key] for key in global_state.keys()}
-    if return_stats:
-        return ordered_state, agg_stats
-    return ordered_state
+    return ordered_state, agg_stats, history_wolf_state
