@@ -1,0 +1,15 @@
+name: fl_moe
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pytorch
+  - torchvision
+  - pytorch-cuda=11.8
+  - numpy
+  - pandas
+  - openpyxl
+  - pyyaml
+  - tqdm
