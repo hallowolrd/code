@@ -1,4 +1,5 @@
 from .client import local_train
+from .server import run_fl_round
 from .param_groups import (
     is_expert_key,
     get_expert_id_from_key,

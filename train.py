@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import DataLoader, Subset
 
 from data import DATASET_CFG, get_dataset, partition_dirichlet
-from fl import aggregate_split_model, local_train, summarize_param_groups
+from fl import run_fl_round, summarize_param_groups
 from model import MoEFedModel
 from utils import evaluate, load_config, set_seed
 
@@ -94,34 +94,20 @@ def main():
         current_lr = cfg["lr"]
         chosen = np.random.choice(cfg["num_clients"], m, replace=False).tolist()
 
-        client_states = []
-        client_samples = []
-        client_losses = []
-
-        for cid in chosen:
-            state, sample_count, avg_client_loss = local_train(
-                global_model=global_model,
-                loader=client_loaders[cid],
-                device=device,
-                local_epochs=cfg["local_epochs"],
-                lr=current_lr,
-                momentum=cfg["momentum"],
-                weight_decay=cfg["weight_decay"],
-            )
-            client_states.append(state)
-            client_samples.append(sample_count)
-            client_losses.append(avg_client_loss)
-
-        new_state = aggregate_split_model(
+        new_state, avg_loss = run_fl_round(
             global_model=global_model,
-            client_states=client_states,
-            client_samples=client_samples,
+            client_loaders=client_loaders,
+            chosen_clients=chosen,
+            device=device,
+            local_epochs=cfg["local_epochs"],
+            lr=current_lr,
+            momentum=cfg["momentum"],
+            weight_decay=cfg["weight_decay"],
             non_expert_agg_method=cfg["non_expert_agg_method"],
             expert_agg_method=cfg["expert_agg_method"],
         )
         global_model.load_state_dict(new_state)
 
-        avg_loss = float(np.mean(client_losses))
         acc = evaluate(global_model, test_loader, device)
         best_acc = max(best_acc, acc)
 
@@ -139,7 +125,7 @@ def main():
             f"{acc:8.2f} | {best_acc:8.2f}"
         )
 
-        del client_states, client_samples, client_losses, new_state
+        del new_state
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
