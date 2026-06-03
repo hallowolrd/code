@@ -3,8 +3,19 @@ import copy
 import torch
 import torch.nn as nn
 
+from .fisher import compute_expert_fisher_total_hook
 
-def local_train(global_model, loader, device, local_epochs, lr, momentum, weight_decay):
+
+def local_train(
+    global_model,
+    loader,
+    device,
+    local_epochs,
+    lr,
+    momentum,
+    weight_decay,
+    compute_fisher_total=False,
+):
     model = copy.deepcopy(global_model).to(device)
     model.train()
 
@@ -32,6 +43,13 @@ def local_train(global_model, loader, device, local_epochs, lr, momentum, weight
             total_loss += loss.item() * x.size(0)
             n_processed += x.size(0)
 
+    if compute_fisher_total:
+        fisher_totals, expert_usage = compute_expert_fisher_total_hook(
+            model, loader, device
+        )
+    else:
+        fisher_totals, expert_usage = None, None
+
     state = {k: v.cpu() for k, v in model.state_dict().items()}
     avg_loss = total_loss / max(n_processed, 1)
 
@@ -39,4 +57,4 @@ def local_train(global_model, loader, device, local_epochs, lr, momentum, weight
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    return state, client_sample_count, avg_loss
+    return state, client_sample_count, avg_loss, fisher_totals, expert_usage

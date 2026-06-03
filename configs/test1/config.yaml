@@ -18,7 +18,7 @@ test_batch_size: 256
 
 # 聚合接口预留：后续会把整个模型聚合拆成非专家参数聚合和专家参数聚合
 non_expert_agg_method: uniform
-expert_agg_method: uniform  # uniform | sample_weighted | fisher_total
+expert_agg_method: uniform
 
 # 输出目录
 output_dir: outputs
