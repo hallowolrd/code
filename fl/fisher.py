@@ -65,8 +65,8 @@ def compute_expert_fisher_total_hook(model, loader, device):
                 )
                 return
 
-            x = activation.float().reshape(activation.shape[0], -1)
-            go = grad_out.float().reshape(grad_out.shape[0], -1)
+            x = activation.detach().double().reshape(activation.shape[0], -1)
+            go = grad_out.detach().double().reshape(grad_out.shape[0], -1)
             grad_sq = go.square().sum(dim=1)
             input_sq = x.square().sum(dim=1)
 
