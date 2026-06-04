@@ -11,7 +11,12 @@ import torch
 import yaml
 from torch.utils.data import DataLoader, Subset
 
-from data import DATASET_CFG, get_dataset, partition_dirichlet
+from data import (
+    DATASET_CFG,
+    get_dataset,
+    get_deterministic_train_dataset,
+    partition_dirichlet,
+)
 from fl import run_fl_round, summarize_param_groups
 from model import MoEFedModel
 from utils import evaluate, load_config, set_seed
@@ -197,6 +202,21 @@ def main():
         )
         for idx in client_indices
     ]
+    fisher_client_loaders = None
+    if cfg["expert_agg_method"] == "fisher_total":
+        fisher_train_ds = get_deterministic_train_dataset(
+            cfg["dataset"], cfg["data_root"]
+        )
+        fisher_client_loaders = [
+            DataLoader(
+                Subset(fisher_train_ds, idx),
+                batch_size=cfg["batch_size"],
+                shuffle=False,
+                num_workers=cfg["num_workers"],
+                pin_memory=True,
+            )
+            for idx in client_indices
+        ]
     test_loader = DataLoader(
         test_ds,
         batch_size=cfg["test_batch_size"],
@@ -259,6 +279,7 @@ def main():
             weight_decay=cfg["weight_decay"],
             non_expert_agg_method=cfg["non_expert_agg_method"],
             expert_agg_method=cfg["expert_agg_method"],
+            fisher_client_loaders=fisher_client_loaders,
             history_wolf_state=history_wolf_state,
             num_clients=cfg["num_clients"],
             num_experts=cfg["num_experts"],

@@ -133,3 +133,47 @@ def get_dataset(name, data_root):
         )
 
     raise ValueError(f"Unsupported dataset: {name}")
+
+
+def get_deterministic_train_dataset(name, data_root):
+    os.makedirs(data_root, exist_ok=True)
+
+    if name == "cifar10":
+        mean, std = (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+        transform = transforms.Compose(
+            [transforms.ToTensor(), transforms.Normalize(mean, std)]
+        )
+        return torchvision.datasets.CIFAR10(
+            data_root, True, download=True, transform=transform
+        )
+
+    if name == "cifar100":
+        mean, std = (0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)
+        transform = transforms.Compose(
+            [transforms.ToTensor(), transforms.Normalize(mean, std)]
+        )
+        return torchvision.datasets.CIFAR100(
+            data_root, True, download=True, transform=transform
+        )
+
+    if name == "tinyimagenet":
+        data_path = _prepare_tinyimagenet(data_root)
+        mean, std = (0.4802, 0.4481, 0.3975), (0.2302, 0.2265, 0.2262)
+        transform = transforms.Compose(
+            [transforms.ToTensor(), transforms.Normalize(mean, std)]
+        )
+        return ImageFolder(os.path.join(data_path, "train"), transform=transform)
+
+    if name == "femnist":
+        transform = transforms.Compose(
+            [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+        )
+        return torchvision.datasets.EMNIST(
+            data_root,
+            split="byclass",
+            train=True,
+            download=True,
+            transform=transform,
+        )
+
+    raise ValueError(f"Unsupported dataset: {name}")

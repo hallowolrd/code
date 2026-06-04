@@ -22,6 +22,7 @@ def local_train(
     momentum,
     weight_decay,
     compute_fisher_total=False,
+    fisher_loader=None,
     logger=None,
 ):
     model = copy.deepcopy(global_model).to(device)
@@ -64,8 +65,9 @@ def local_train(
         train_router_stats = dict(_EMPTY_ROUTER_STATS)
 
     if compute_fisher_total:
+        evidence_loader = fisher_loader if fisher_loader is not None else loader
         fisher_totals, fisher_expert_usage = compute_expert_fisher_total_hook(
-            model, loader, device, logger=logger
+            model, evidence_loader, device, logger=logger
         )
     else:
         fisher_totals, fisher_expert_usage = [], []

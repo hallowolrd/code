@@ -229,6 +229,7 @@ def run_fl_round(
     weight_decay,
     non_expert_agg_method,
     expert_agg_method,
+    fisher_client_loaders=None,
     history_wolf_state=None,
     num_clients=None,
     num_experts=None,
@@ -250,6 +251,10 @@ def run_fl_round(
     _emit(logger, f"[RoundClients] round={round_id} chosen_clients={chosen_clients}")
 
     for cid in chosen_clients:
+        fisher_loader = None
+        if compute_fisher_total and fisher_client_loaders is not None:
+            fisher_loader = fisher_client_loaders[cid]
+
         (
             state,
             sample_count,
@@ -267,6 +272,7 @@ def run_fl_round(
             momentum=momentum,
             weight_decay=weight_decay,
             compute_fisher_total=compute_fisher_total,
+            fisher_loader=fisher_loader,
             logger=logger,
         )
         client_states.append(state)
