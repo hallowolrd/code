@@ -13,6 +13,7 @@ utils/*
 !utils/config.py
 !utils/seed.py
 !utils/eval.py
+!utils/logging_utils.py
 outputs/
 *.xlsx
 .vscode/

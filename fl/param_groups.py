@@ -27,7 +27,7 @@ def split_state_keys(state_dict):
     return expert_keys, non_expert_keys
 
 
-def summarize_param_groups(state_dict):
+def summarize_param_groups(state_dict, logger=None):
     expert_keys, non_expert_keys = split_state_keys(state_dict)
     expert_key_counts = {}
 
@@ -37,11 +37,17 @@ def summarize_param_groups(state_dict):
             continue
         expert_key_counts[expert_id] = expert_key_counts.get(expert_id, 0) + 1
 
-    print(f"[ParamGroups] expert keys: {len(expert_keys)}")
-    print(f"[ParamGroups] non-expert keys: {len(non_expert_keys)}")
-    print(f"[ParamGroups] expert ids: {sorted(expert_key_counts)}")
+    def emit(message):
+        if logger is not None:
+            logger.info(message)
+        else:
+            print(message)
+
+    emit(f"[ParamGroups] expert keys: {len(expert_keys)}")
+    emit(f"[ParamGroups] non-expert keys: {len(non_expert_keys)}")
+    emit(f"[ParamGroups] expert ids: {sorted(expert_key_counts)}")
     for expert_id in sorted(expert_key_counts):
-        print(f"[ParamGroups] expert {expert_id} keys: {expert_key_counts[expert_id]}")
+        emit(f"[ParamGroups] expert {expert_id} keys: {expert_key_counts[expert_id]}")
 
     return {
         "num_expert_keys": len(expert_keys),

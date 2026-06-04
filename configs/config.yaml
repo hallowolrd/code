@@ -21,4 +21,7 @@ non_expert_agg_method: uniform
 expert_agg_method: uniform  # uniform | sample_weighted | fisher_total | history_wolf | fisher_history_wolf
 
 # 输出目录
+run_name: null
 output_dir: outputs
+log_client_details: true
+save_jsonl: true

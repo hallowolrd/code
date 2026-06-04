@@ -3,18 +3,26 @@ import math
 import torch
 
 
-def _safe_add_contribution(fisher_totals, expert_id, contribution):
+def _log_warning(logger, message):
+    if logger is not None:
+        logger.warning(message)
+    else:
+        print(message)
+
+
+def _safe_add_contribution(fisher_totals, expert_id, contribution, logger=None):
     value = float(contribution.detach().cpu().item())
     if not math.isfinite(value):
-        print(
+        _log_warning(
+            logger,
             f"[FisherTotalHook][Warning] non-finite contribution for expert "
-            f"{expert_id}; set to 0"
+            f"{expert_id}; set to 0",
         )
         value = 0.0
     fisher_totals[expert_id] += value
 
 
-def compute_expert_fisher_total_hook(model, loader, device):
+def compute_expert_fisher_total_hook(model, loader, device, logger=None):
     """
     Compute expert-level total empirical Fisher for MoE experts using Linear hooks.
 
@@ -59,9 +67,10 @@ def compute_expert_fisher_total_hook(model, loader, device):
 
             grad_out = grad_output[0].detach()
             if activation.shape[0] != grad_out.shape[0]:
-                print(
+                _log_warning(
+                    logger,
                     f"[FisherTotalHook][Warning] activation/gradient batch "
-                    f"mismatch for expert {expert_id}; skip contribution"
+                    f"mismatch for expert {expert_id}; skip contribution",
                 )
                 return
 
@@ -73,7 +82,7 @@ def compute_expert_fisher_total_hook(model, loader, device):
             contribution = (grad_sq * input_sq).sum()
             if module.bias is not None:
                 contribution = contribution + grad_sq.sum()
-            _safe_add_contribution(fisher_totals, expert_id, contribution)
+            _safe_add_contribution(fisher_totals, expert_id, contribution, logger)
 
         return backward_hook
 
@@ -92,13 +101,17 @@ def compute_expert_fisher_total_hook(model, loader, device):
                     make_forward_hook(expert_id, count_usage=True)
                 )
             )
-            hooks.append(expert.fc1.register_full_backward_hook(make_backward_hook(expert_id)))
+            hooks.append(
+                expert.fc1.register_full_backward_hook(make_backward_hook(expert_id))
+            )
             hooks.append(
                 expert.fc2.register_forward_hook(
                     make_forward_hook(expert_id, count_usage=False)
                 )
             )
-            hooks.append(expert.fc2.register_full_backward_hook(make_backward_hook(expert_id)))
+            hooks.append(
+                expert.fc2.register_full_backward_hook(make_backward_hook(expert_id))
+            )
 
         criterion = torch.nn.CrossEntropyLoss(reduction="sum")
 
@@ -110,7 +123,7 @@ def compute_expert_fisher_total_hook(model, loader, device):
 
             with torch.no_grad():
                 feat = model.backbone(x)
-            logits = model.moe_head(feat)
+            logits = model.moe_head(feat.detach())
             loss = criterion(logits, y)
             loss.backward()
 

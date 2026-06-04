@@ -4,6 +4,13 @@ from .aggregators import aggregate_split_model
 from .client import local_train
 
 
+def _emit(logger, message):
+    if logger is not None:
+        logger.info(message)
+    else:
+        print(message)
+
+
 def _finite_nonnegative(value):
     try:
         value = float(value)
@@ -38,16 +45,11 @@ def _num_experts_from_client_stats(client_fisher_totals, client_expert_usages):
     return max(fisher_lengths + usage_lengths, default=0)
 
 
-def _print_fisher_total_summary(client_fisher_totals, client_expert_usages):
-    if not client_fisher_totals:
-        return
-
+def _print_fisher_total_summary(client_fisher_totals, client_expert_usages, logger=None):
     num_experts = _num_experts_from_client_stats(
         client_fisher_totals, client_expert_usages
     )
-    if num_experts <= 0:
-        return
-
+    client_fisher_totals = client_fisher_totals or []
     client_expert_usages = client_expert_usages or []
 
     usage_sum = []
@@ -77,13 +79,15 @@ def _print_fisher_total_summary(client_fisher_totals, client_expert_usages):
         fisher_max.append(max(fishers) if fishers else 0.0)
         zero_fisher_clients.append(sum(value <= 0 for value in fishers))
 
-    print(
-        f"[FisherTotalHook] usage_sum={usage_sum} "
-        f"fisher_sum={_format_float_list(fisher_sum)} "
-        f"fisher_median_pos={_format_float_list(fisher_median_pos)} "
-        f"fisher_max={_format_float_list(fisher_max)} "
-        f"zero_fisher_clients={zero_fisher_clients}"
+    _emit(logger, f"[FisherTotalHook] usage_sum={usage_sum}")
+    _emit(logger, f"[FisherTotalHook] fisher_sum={_format_float_list(fisher_sum)}")
+    _emit(
+        logger,
+        f"[FisherTotalHook] fisher_median_pos="
+        f"{_format_float_list(fisher_median_pos)}",
     )
+    _emit(logger, f"[FisherTotalHook] fisher_max={_format_float_list(fisher_max)}")
+    _emit(logger, f"[FisherTotalHook] zero_fisher_clients={zero_fisher_clients}")
 
 
 def _stats_float_list(stats, key):
@@ -100,47 +104,118 @@ def _stats_int_list(stats, key):
     return [_int_nonnegative(value) for value in values]
 
 
-def _print_fisher_total_agg_summary(stats):
-    print(
-        f"[FisherTotalAgg] weight_max={_format_float_list(_stats_float_list(stats, 'weight_max'))} "
-        f"weight_min_pos={_format_float_list(_stats_float_list(stats, 'weight_min_pos'))} "
-        f"weight_entropy={_format_float_list(_stats_float_list(stats, 'weight_entropy'))} "
-        f"fallback_experts={_stats_int_list(stats, 'fallback_experts')}"
+def _print_fisher_total_agg_summary(stats, logger=None):
+    _emit(
+        logger,
+        f"[FisherTotalAgg] weight_max="
+        f"{_format_float_list(_stats_float_list(stats, 'weight_max'))}",
+    )
+    _emit(
+        logger,
+        f"[FisherTotalAgg] weight_min_pos="
+        f"{_format_float_list(_stats_float_list(stats, 'weight_min_pos'))}",
+    )
+    _emit(
+        logger,
+        f"[FisherTotalAgg] weight_entropy="
+        f"{_format_float_list(_stats_float_list(stats, 'weight_entropy'))}",
+    )
+    _emit(
+        logger,
+        f"[FisherTotalAgg] fallback_experts="
+        f"{_stats_int_list(stats, 'fallback_experts')}",
     )
 
 
-def _print_history_wolf_summary(stats, include_p_mean=False):
-    print(f"[HistoryWoLF] q_mean={_format_float_list(_stats_float_list(stats, 'q_mean'))}")
+def _print_history_wolf_summary(stats, include_p_mean=False, logger=None):
+    _emit(logger, f"[HistoryWoLF] q_mean={_format_float_list(_stats_float_list(stats, 'q_mean'))}")
     if include_p_mean:
-        print(f"[HistoryWoLF] p_mean={_format_float_list(_stats_float_list(stats, 'p_mean'))}")
-    print(
+        _emit(logger, f"[HistoryWoLF] p_mean={_format_float_list(_stats_float_list(stats, 'p_mean'))}")
+    _emit(
+        logger,
         f"[HistoryWoLF] h_prev_mean="
-        f"{_format_float_list(_stats_float_list(stats, 'h_prev_mean'))}"
+        f"{_format_float_list(_stats_float_list(stats, 'h_prev_mean'))}",
     )
-    print(
+    _emit(
+        logger,
         f"[HistoryWoLF] h_new_mean="
-        f"{_format_float_list(_stats_float_list(stats, 'h_new_mean'))}"
+        f"{_format_float_list(_stats_float_list(stats, 'h_new_mean'))}",
     )
-    print(
+    _emit(
+        logger,
         f"[HistoryWoLF] rho_mean="
-        f"{_format_float_list(_stats_float_list(stats, 'rho_mean'))}"
+        f"{_format_float_list(_stats_float_list(stats, 'rho_mean'))}",
     )
-    print(
+    _emit(
+        logger,
         f"[HistoryWoLF] weight_entropy="
-        f"{_format_float_list(_stats_float_list(stats, 'weight_entropy'))}"
+        f"{_format_float_list(_stats_float_list(stats, 'weight_entropy'))}",
     )
-    print(f"[HistoryWoLF] fallback_experts={_stats_int_list(stats, 'fallback_experts')}")
-    print(f"[HistoryWoLF] quadrant_counts={stats.get('quadrant_counts', {})}")
-    print(
+    _emit(logger, f"[HistoryWoLF] fallback_experts={_stats_int_list(stats, 'fallback_experts')}")
+    _emit(logger, f"[HistoryWoLF] quadrant_counts={stats.get('quadrant_counts', {})}")
+    _emit(
+        logger,
         f"[HistoryWoLF] quadrant_weight_mean="
-        f"{stats.get('quadrant_weight_mean', {})}"
+        f"{stats.get('quadrant_weight_mean', {})}",
     )
-    print(
+    _emit(
+        logger,
         f"[HistoryWoLF] quadrant_raw_weight_mean="
-        f"{stats.get('quadrant_raw_weight_mean', {})}"
+        f"{stats.get('quadrant_raw_weight_mean', {})}",
     )
     if include_p_mean and "quadrant_fisher_mean" in stats:
-        print(f"[HistoryWoLF] quadrant_fisher_mean={stats['quadrant_fisher_mean']}")
+        _emit(logger, f"[HistoryWoLF] quadrant_fisher_mean={stats['quadrant_fisher_mean']}")
+
+
+def _sum_int_lists(value_lists):
+    max_len = max((len(values) for values in value_lists if values), default=0)
+    totals = [0 for _ in range(max_len)]
+    for values in value_lists:
+        if not values:
+            continue
+        for idx, value in enumerate(values[:max_len]):
+            totals[idx] += _int_nonnegative(value)
+    return totals
+
+
+def _weighted_avg_router_probs(client_router_stats, client_samples):
+    max_len = max(
+        (
+            len(stats.get("avg_router_probs") or [])
+            for stats in client_router_stats
+            if isinstance(stats, dict)
+        ),
+        default=0,
+    )
+    if max_len <= 0:
+        return []
+
+    weighted = [0.0 for _ in range(max_len)]
+    total_weight = 0
+    for stats, samples in zip(client_router_stats, client_samples):
+        if not isinstance(stats, dict):
+            continue
+        probs = stats.get("avg_router_probs") or []
+        if not probs or _int_nonnegative(stats.get("router_count", 0)) <= 0:
+            continue
+        weight = _int_nonnegative(samples)
+        if weight <= 0:
+            continue
+        for idx, value in enumerate(probs[:max_len]):
+            weighted[idx] += _finite_nonnegative(value) * weight
+        total_weight += weight
+
+    if total_weight <= 0:
+        return []
+    return [value / total_weight for value in weighted]
+
+
+def _mean(values):
+    return float(np.mean(values)) if values else 0.0
+
+
+def _std(values):
+    return float(np.std(values)) if values else 0.0
 
 
 def run_fl_round(
@@ -157,16 +232,33 @@ def run_fl_round(
     history_wolf_state=None,
     num_clients=None,
     num_experts=None,
+    round_id=None,
+    logger=None,
+    log_client_details=True,
 ):
     compute_fisher_total = expert_agg_method in {"fisher_total", "fisher_history_wolf"}
+    chosen_clients = [int(cid) for cid in chosen_clients]
     client_states = []
     client_samples = []
     client_losses = []
+    client_accs = []
     client_fisher_totals = []
     client_expert_usages = []
+    client_router_stats = []
+    client_records = []
+
+    _emit(logger, f"[RoundClients] round={round_id} chosen_clients={chosen_clients}")
 
     for cid in chosen_clients:
-        state, sample_count, loss, fisher_totals, expert_usage = local_train(
+        (
+            state,
+            sample_count,
+            loss,
+            train_acc,
+            fisher_totals,
+            fisher_expert_usage,
+            train_router_stats,
+        ) = local_train(
             global_model=global_model,
             loader=client_loaders[cid],
             device=device,
@@ -175,15 +267,44 @@ def run_fl_round(
             momentum=momentum,
             weight_decay=weight_decay,
             compute_fisher_total=compute_fisher_total,
+            logger=logger,
         )
         client_states.append(state)
         client_samples.append(sample_count)
         client_losses.append(loss)
+        client_accs.append(train_acc)
         client_fisher_totals.append(fisher_totals)
-        client_expert_usages.append(expert_usage)
+        client_expert_usages.append(fisher_expert_usage)
+        client_router_stats.append(train_router_stats)
+
+        expert_usage = train_router_stats.get("expert_usage", [])
+        avg_router_probs = train_router_stats.get("avg_router_probs", [])
+        client_record = {
+            "round": round_id,
+            "cid": cid,
+            "samples": sample_count,
+            "loss": loss,
+            "acc": train_acc,
+            "expert_usage": expert_usage,
+            "avg_router_probs": avg_router_probs,
+            "fisher_totals": fisher_totals,
+            "fisher_expert_usage": fisher_expert_usage,
+        }
+        client_records.append(client_record)
+
+        if log_client_details:
+            _emit(
+                logger,
+                f"[ClientTrain] round={round_id} cid={cid} samples={sample_count} "
+                f"loss={loss:.6g} acc={train_acc:.6g} "
+                f"expert_usage={expert_usage} "
+                f"avg_router_probs={_format_float_list(avg_router_probs)}",
+            )
 
     if compute_fisher_total:
-        _print_fisher_total_summary(client_fisher_totals, client_expert_usages)
+        _print_fisher_total_summary(
+            client_fisher_totals, client_expert_usages, logger=logger
+        )
 
     aggregate_result = aggregate_split_model(
         global_model=global_model,
@@ -203,13 +324,50 @@ def run_fl_round(
     )
     new_state, agg_stats, history_wolf_state = aggregate_result
     if expert_agg_method == "fisher_total":
-        _print_fisher_total_agg_summary(agg_stats)
+        _print_fisher_total_agg_summary(agg_stats, logger=logger)
     if expert_agg_method in {"history_wolf", "fisher_history_wolf"} and agg_stats:
         _print_history_wolf_summary(
             agg_stats,
             include_p_mean=expert_agg_method == "fisher_history_wolf",
+            logger=logger,
         )
 
-    avg_loss = float(np.mean(client_losses))
+    client_loss_mean = _mean(client_losses)
+    client_loss_std = _std(client_losses)
+    client_acc_mean = _mean(client_accs)
+    client_acc_std = _std(client_accs)
+    train_expert_usage_sum = _sum_int_lists(
+        [stats.get("expert_usage", []) for stats in client_router_stats]
+    )
+    train_avg_router_probs = _weighted_avg_router_probs(
+        client_router_stats, client_samples
+    )
+    avg_loss = client_loss_mean
 
-    return new_state, avg_loss, history_wolf_state
+    _emit(
+        logger,
+        f"[RoundTrain] round={round_id} "
+        f"client_loss_mean={client_loss_mean:.6g} "
+        f"client_loss_std={client_loss_std:.6g} "
+        f"client_acc_mean={client_acc_mean:.6g} "
+        f"client_acc_std={client_acc_std:.6g}",
+    )
+    _emit(
+        logger,
+        f"[RouterTrain] round={round_id} usage_sum={train_expert_usage_sum} "
+        f"avg_router_probs_weighted={_format_float_list(train_avg_router_probs)}",
+    )
+
+    round_record = {
+        "round": round_id,
+        "chosen_clients": chosen_clients,
+        "avg_loss": avg_loss,
+        "client_loss_mean": client_loss_mean,
+        "client_loss_std": client_loss_std,
+        "client_acc_mean": client_acc_mean,
+        "client_acc_std": client_acc_std,
+        "train_expert_usage_sum": train_expert_usage_sum,
+        "train_avg_router_probs": train_avg_router_probs,
+    }
+
+    return new_state, avg_loss, history_wolf_state, round_record, client_records
