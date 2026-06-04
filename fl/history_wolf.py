@@ -176,7 +176,11 @@ def _leave_one_out_q_values(directions, eps):
             if not math.isfinite(cosine):
                 cosine = 0.0
             cosine = max(-1.0, min(1.0, cosine))
-            q_value = max(0.0, min(1.0, (1.0 + cosine) / 2.0))
+            if cosine >= 0.0:
+                q_value = 1.0
+            else:
+                q_value = 1.0 + cosine
+            q_value = max(0.0, min(1.0, q_value))
         q_values.append(q_value)
 
     return q_values

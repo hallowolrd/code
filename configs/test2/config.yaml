@@ -17,8 +17,9 @@ num_workers: 2
 test_batch_size: 256
 
 # 聚合接口预留：后续会把整个模型聚合拆成非专家参数聚合和专家参数聚合
-non_expert_agg_method: sample_weighted
-expert_agg_method: sample_weighted  # uniform | sample_weighted | fisher_total | history_wolf | fisher_history_wolf
+non_expert_agg_method: uniform
+# uniform | sample_weighted | fisher_total | history_wolf | fisher_history_wolf | fisher_trace_per_active_sample
+expert_agg_method: fisher_trace_per_active_sample
 
 # 输出目录
 run_name: null
