@@ -113,6 +113,27 @@ def _sanitize_expert_fisher_trace_per_active_sample_scores(
     return scores
 
 
+def _build_fisher_trace_per_active_sample_totals(
+    client_fisher_totals,
+    client_expert_usages,
+    num_experts,
+):
+    trace_scores_by_client = [
+        [0.0 for _ in range(num_experts)] for _ in client_fisher_totals
+    ]
+
+    for expert_id in range(num_experts):
+        expert_scores = _sanitize_expert_fisher_trace_per_active_sample_scores(
+            client_fisher_totals,
+            client_expert_usages,
+            expert_id,
+        )
+        for local_idx, score in enumerate(expert_scores):
+            trace_scores_by_client[local_idx][expert_id] = score
+
+    return trace_scores_by_client
+
+
 def _normalize_fisher_weights(weights, eps):
     positives = [weight for weight in weights if weight > 0]
     if not positives:
@@ -397,6 +418,15 @@ def aggregate_split_model(
             raise ValueError(
                 "client_fisher_totals must be provided for fisher_history_wolf"
             )
+        if client_expert_usages is None:
+            raise ValueError(
+                "client_expert_usages must be provided for fisher_history_wolf"
+            )
+        trace_fisher_totals = _build_fisher_trace_per_active_sample_totals(
+            client_fisher_totals=client_fisher_totals,
+            client_expert_usages=client_expert_usages,
+            num_experts=num_experts,
+        )
         expert_state, history_wolf_state, agg_stats = aggregate_keys_history_wolf(
             global_state=global_state,
             client_states=client_states,
@@ -405,7 +435,7 @@ def aggregate_split_model(
             history_wolf_state=history_wolf_state,
             num_clients=num_clients,
             num_experts=num_experts,
-            client_fisher_totals=client_fisher_totals,
+            client_fisher_totals=trace_fisher_totals,
             use_fisher_precision=True,
             return_stats=return_stats,
         )
