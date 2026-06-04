@@ -203,7 +203,7 @@ def main():
         for idx in client_indices
     ]
     fisher_client_loaders = None
-    if cfg["expert_agg_method"] == "fisher_total":
+    if cfg["expert_agg_method"] in {"fisher_total", "fisher_history_wolf"}:
         fisher_train_ds = get_deterministic_train_dataset(
             cfg["dataset"], cfg["data_root"]
         )
