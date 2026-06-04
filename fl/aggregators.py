@@ -78,6 +78,41 @@ def _sanitize_expert_fisher_weights(client_fisher_totals, expert_id):
     return weights
 
 
+def _sanitize_expert_fisher_trace_per_active_sample_scores(
+    client_fisher_totals,
+    client_expert_usages,
+    expert_id,
+):
+    scores = []
+    for fisher_totals, expert_usages in zip(
+        client_fisher_totals, client_expert_usages
+    ):
+        fisher = 0.0
+        if fisher_totals is not None and expert_id < len(fisher_totals):
+            try:
+                fisher = float(fisher_totals[expert_id])
+            except (TypeError, ValueError):
+                fisher = 0.0
+        if not math.isfinite(fisher) or fisher < 0:
+            fisher = 0.0
+
+        usage = 0.0
+        if expert_usages is not None and expert_id < len(expert_usages):
+            try:
+                usage = float(expert_usages[expert_id])
+            except (TypeError, ValueError):
+                usage = 0.0
+        if not math.isfinite(usage) or usage <= 0:
+            usage = 0.0
+
+        score = fisher / usage if fisher > 0 and usage > 0 else 0.0
+        if not math.isfinite(score) or score < 0:
+            score = 0.0
+        scores.append(score)
+
+    return scores
+
+
 def _normalize_fisher_weights(weights, eps):
     positives = [weight for weight in weights if weight > 0]
     if not positives:
@@ -191,6 +226,83 @@ def aggregate_keys_fisher_total(
     return aggregated
 
 
+def aggregate_keys_fisher_trace_per_active_sample(
+    global_state,
+    client_states,
+    client_fisher_totals,
+    client_expert_usages,
+    keys,
+    eps=1e-30,
+    return_stats=False,
+):
+    if not client_states:
+        raise ValueError("client_states must not be empty")
+    if client_fisher_totals is None:
+        raise ValueError(
+            "client_fisher_totals must be provided for "
+            "fisher_trace_per_active_sample"
+        )
+    if client_expert_usages is None:
+        raise ValueError(
+            "client_expert_usages must be provided for "
+            "fisher_trace_per_active_sample"
+        )
+    if len(client_fisher_totals) != len(client_states):
+        raise ValueError(
+            "client_fisher_totals length must match client_states length"
+        )
+    if len(client_expert_usages) != len(client_states):
+        raise ValueError(
+            "client_expert_usages length must match client_states length"
+        )
+
+    num_clients = len(client_states)
+    weights_by_expert = {}
+    fallback_experts = set()
+    aggregated = {}
+
+    for key in keys:
+        target = global_state[key]
+        if not torch.is_floating_point(target):
+            aggregated[key] = client_states[0][key].to(
+                device=target.device,
+                dtype=target.dtype,
+            )
+            continue
+
+        expert_id = get_expert_id_from_key(key)
+        if expert_id is None:
+            raise ValueError(
+                "fisher_trace_per_active_sample received non-expert key: "
+                f"{key}"
+            )
+
+        if expert_id not in weights_by_expert:
+            scores = _sanitize_expert_fisher_trace_per_active_sample_scores(
+                client_fisher_totals,
+                client_expert_usages,
+                expert_id,
+            )
+            norm_weights = _normalize_fisher_weights(scores, eps)
+            if norm_weights is None:
+                norm_weights = [1.0 / num_clients for _ in client_states]
+                fallback_experts.add(expert_id)
+            weights_by_expert[expert_id] = norm_weights
+
+        avg = torch.zeros_like(target, device="cpu", dtype=torch.float32)
+        for client_state, weight in zip(client_states, weights_by_expert[expert_id]):
+            avg += client_state[key].detach().cpu().float() * weight
+        aggregated[key] = avg.to(device=target.device, dtype=target.dtype)
+
+    if return_stats:
+        stats = _summarize_fisher_total_agg_weights(
+            weights_by_expert, fallback_experts, tiny=eps
+        )
+        return aggregated, stats
+
+    return aggregated
+
+
 def build_key_aggregator(method):
     if method == "uniform":
         return aggregate_keys_uniform
@@ -206,6 +318,7 @@ def aggregate_split_model(
     non_expert_agg_method="uniform",
     expert_agg_method="uniform",
     client_fisher_totals=None,
+    client_expert_usages=None,
     return_stats=False,
     selected_client_ids=None,
     history_wolf_state=None,
@@ -231,6 +344,20 @@ def aggregate_split_model(
             global_state,
             client_states,
             client_fisher_totals,
+            expert_keys,
+            return_stats=return_stats,
+        )
+        if return_stats:
+            expert_state, agg_stats = fisher_result
+        else:
+            expert_state = fisher_result
+        new_state.update(expert_state)
+    elif expert_agg_method == "fisher_trace_per_active_sample":
+        fisher_result = aggregate_keys_fisher_trace_per_active_sample(
+            global_state,
+            client_states,
+            client_fisher_totals,
+            client_expert_usages,
             expert_keys,
             return_stats=return_stats,
         )

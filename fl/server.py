@@ -237,7 +237,11 @@ def run_fl_round(
     logger=None,
     log_client_details=True,
 ):
-    compute_fisher_total = expert_agg_method in {"fisher_total", "fisher_history_wolf"}
+    compute_fisher_total = expert_agg_method in {
+        "fisher_total",
+        "fisher_history_wolf",
+        "fisher_trace_per_active_sample",
+    }
     chosen_clients = [int(cid) for cid in chosen_clients]
     client_states = []
     client_samples = []
@@ -319,6 +323,7 @@ def run_fl_round(
         non_expert_agg_method=non_expert_agg_method,
         expert_agg_method=expert_agg_method,
         client_fisher_totals=client_fisher_totals if compute_fisher_total else None,
+        client_expert_usages=client_expert_usages if compute_fisher_total else None,
         return_stats=(
             compute_fisher_total
             or expert_agg_method in {"history_wolf", "fisher_history_wolf"}
@@ -329,7 +334,7 @@ def run_fl_round(
         num_experts=num_experts,
     )
     new_state, agg_stats, history_wolf_state = aggregate_result
-    if expert_agg_method == "fisher_total":
+    if expert_agg_method in {"fisher_total", "fisher_trace_per_active_sample"}:
         _print_fisher_total_agg_summary(agg_stats, logger=logger)
     if expert_agg_method in {"history_wolf", "fisher_history_wolf"} and agg_stats:
         _print_history_wolf_summary(
